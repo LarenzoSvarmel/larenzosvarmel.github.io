@@ -2,97 +2,270 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Raycaster Map Editor</title>
+<title>Raycaster Engine + Map / Sprite / HUD Editor</title>
 <style>
-  body {
-    background: #111;
-    color: #fff;
-    font-family: monospace;
-    margin: 0;
-    display: flex;
-    height: 100vh;
-  }
-  #ui {
-    padding: 10px;
-    width: 250px;
-    background: #1a1a1a;
-  }
-  canvas {
-    background: #000;
-    cursor: pointer;
-  }
-  button {
-    width: 100%;
-    margin-top: 5px;
-    padding: 6px;
-  }
-  textarea {
-    width: 100%;
-    height: 200px;
-    margin-top: 5px;
-    background: #000;
-    color: #0f0;
-  }
+html,body{margin:0;height:100%;background:#111;color:#fff;font-family:monospace;overflow:hidden}
+body{display:flex}
+#panel{width:320px;background:#1a1a1a;overflow:auto;padding:8px;box-sizing:border-box}
+#panel h3{margin:6px 0}
+#panel label{font-size:12px;display:block;margin-top:6px}
+#panel button,#panel input,#panel select,#panel textarea{width:100%;margin-top:4px}
+#view{flex:1;display:flex;flex-direction:column;gap:6px;padding:6px}
+canvas{border:1px solid #222;image-rendering:pixelated}
+#map{width:180px;height:180px}
+#preview{width:640px;height:360px}
+#dialogue{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);width:70%;background:rgba(0,0,0,.85);padding:12px;display:none}
 </style>
 </head>
 <body>
 
-<div id="ui">
-  <h3>Map Editor</h3>
-  <button onclick="clearMap()">Clear</button>
-  <button onclick="exportMap()">Export</button>
-  <textarea id="output" readonly></textarea>
+<div id="panel">
+<h3>Map Editor</h3>
+<button onclick="mode='wall'">Wall</button>
+<button onclick="mode='fade'">Fade Zone</button>
+<button onclick="mode='dialogue'">Dialogue Zone</button>
+<button onclick="mode='light'">Light</button>
+<button onclick="mode='player'">Player</button>
+
+<label>Dialogue Text</label>
+<textarea id="dialogueText"></textarea>
+
+<label>Light Radius</label>
+<input type="range" id="lRad" min="1" max="12" step="0.5" value="5">
+<label>Light Energy</label>
+<input type="range" id="lPow" min="0" max="1" step="0.05" value="0.6">
+<label>Light Color</label>
+<input type="color" id="lCol" value="#ffffff">
+
+<label><input type="checkbox" id="flashlight"> Has Flashlight</label>
+
+<label>Camera Bobbing</label>
+<select id="bob">
+<option value="none">None</option>
+<option value="classic">Classic</option>
+<option value="realistic">Realistic</option>
+</select>
+
+<label><input type="checkbox" id="sky" checked> Skybox</label>
+<label>Sky Color</label><input type="color" id="skyCol" value="#4a6fa5">
+<label>Sun Color</label><input type="color" id="sunCol" value="#ffd27d">
+<label>Floor Color</label><input type="color" id="floorCol" value="#444444">
+
+<button onclick="exportAll()">Export JSON</button>
+<textarea id="out" readonly></textarea>
+
+<h3>16-bit Sprite Editor</h3>
+<label>Name</label><input id="sName">
+<label>Category</label>
+<select id="sCat">
+<option value="hud">HUD</option>
+<option value="enemy">Enemy</option>
+<option value="weapon">Weapon</option>
+</select>
+
+<canvas id="sprite" width="256" height="256"></canvas>
+
+<label><input type="checkbox" id="wAmmo"> Ammo</label>
+<label><input type="checkbox" id="wNR"> Non-Reloadable</label>
+<label><input type="checkbox" id="wCross"> Crosshair</label>
+<label><input type="checkbox" id="wAuto"> Auto</label>
+
+<button onclick="saveSprite()">Save Sprite</button>
 </div>
 
-<canvas id="grid"></canvas>
+<div id="view">
+<canvas id="map" width="180" height="180"></canvas>
+<canvas id="preview" width="640" height="360"></canvas>
+</div>
+
+<div id="dialogue"></div>
 
 <script>
-const TILE_SIZE = 32;
-const WIDTH = 16;
-const HEIGHT = 16;
+/* ---------- SPRITE EDITOR ---------- */
+const S=32,P=8;
+const sC=document.getElementById('sprite'),sX=sC.getContext('2d');
+sX.imageSmoothingEnabled=false;
+let pix=Array.from({length:S},()=>Array(S).fill("#000000"));
+let sprites={hud:[],enemy:[],weapon:[]};
 
-const canvas = document.getElementById('grid');
-canvas.width = WIDTH * TILE_SIZE;
-canvas.height = HEIGHT * TILE_SIZE;
-const ctx = canvas.getContext('2d');
+function drawSprite(){
+ sX.clearRect(0,0,256,256);
+ for(let y=0;y<S;y++)for(let x=0;x<S;x++){
+  sX.fillStyle=pix[y][x];
+  sX.fillRect(x*P,y*P,P,P);
+ }
+}
+drawSprite();
 
-let map = Array.from({length: HEIGHT}, (_, y) =>
-  Array.from({length: WIDTH}, (_, x) =>
-    x === 0 || y === 0 || x === WIDTH-1 || y === HEIGHT-1 ? 1 : 0
-  )
-);
+sC.onclick=e=>{
+ const r=sC.getBoundingClientRect();
+ const x=Math.floor((e.clientX-r.left)/P);
+ const y=Math.floor((e.clientY-r.top)/P);
+ if(x>=0&&y>=0&&x<S&&y<S){pix[y][x]=lCol.value;drawSprite();}
+};
 
-function draw() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  for (let y=0;y<HEIGHT;y++) {
-    for (let x=0;x<WIDTH;x++) {
-      ctx.fillStyle = map[y][x] ? '#888' : '#222';
-      ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
-      ctx.strokeStyle = '#111';
-      ctx.strokeRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
-    }
+function saveSprite(){
+ const c=document.createElement('canvas');c.width=S;c.height=S;
+ const cx=c.getContext('2d');
+ for(let y=0;y<S;y++)for(let x=0;x<S;x++){
+  cx.fillStyle=pix[y][x];cx.fillRect(x,y,1,1);
+ }
+ sprites[sCat.value].push({
+  name:sName.value,
+  data:c.toDataURL(),
+  weapon:{
+   ammo:wAmmo.checked,
+   noreload:wNR.checked,
+   crosshair:wCross.checked,
+   auto:wAuto.checked
   }
+ });
 }
 
-canvas.addEventListener('click', e => {
-  const x = Math.floor(e.offsetX / TILE_SIZE);
-  const y = Math.floor(e.offsetY / TILE_SIZE);
-  map[y][x] = map[y][x] ? 0 : 1;
-  draw();
-});
+/* ---------- MAP DATA ---------- */
+const W=12,H=12,T=15;
+const mC=document.getElementById('map'),mX=mC.getContext('2d');
+let map=Array.from({length:H},(_,y)=>Array.from({length:W},(_,x)=>x==0||y==0||x==W-1||y==H-1?1:0));
+let fades=Array.from({length:H},()=>Array(W).fill(0));
+let dialogs=Array.from({length:H},()=>Array(W).fill(null));
+let lights=[];
+let player={x:6.5,y:6.5,a:0};
+let mode='wall';
 
-function clearMap() {
-  map = map.map(row => row.map(() => 0));
-  draw();
+function tile(e){
+ const r=mC.getBoundingClientRect();
+ return {
+  x:Math.floor((e.clientX-r.left)/T),
+  y:Math.floor((e.clientY-r.top)/T)
+ };
 }
 
-function exportMap() {
-  document.getElementById('output').value =
-    JSON.stringify(map, null, 2);
+mC.onclick=e=>{
+ const {x,y}=tile(e);
+ if(x<0||y<0||x>=W||y>=H)return;
+ if(mode==='wall')map[y][x]^=1;
+ if(mode==='fade')fades[y][x]^=1;
+ if(mode==='dialogue')dialogs[y][x]=dialogs[y][x]?null:dialogueText.value;
+ if(mode==='player'){player.x=x+.5;player.y=y+.5;}
+ if(mode==='light'){
+  const i=lights.findIndex(l=>Math.floor(l.x)==x&&Math.floor(l.y)==y);
+  if(i>=0)lights.splice(i,1);
+  else lights.push({x:x+.5,y:y+.5,r:+lRad.value,e:+lPow.value,c:lCol.value});
+ }
+};
+
+function drawMap(){
+ mX.clearRect(0,0,180,180);
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+  mX.fillStyle=map[y][x]?"#666":"#222";
+  mX.fillRect(x*T,y*T,T,T);
+  if(fades[y][x]){mX.fillStyle="rgba(255,0,255,.4)";mX.fillRect(x*T,y*T,T,T);}
+  if(dialogs[y][x]){mX.fillStyle="rgba(0,255,255,.4)";mX.fillRect(x*T,y*T,T,T);}
+ }
+ lights.forEach(l=>{
+  mX.fillStyle=l.c;
+  mX.beginPath();mX.arc(l.x*T,l.y*T,3,0,Math.PI*2);mX.fill();
+ });
+ mX.fillStyle="#0f0";
+ mX.beginPath();mX.arc(player.x*T,player.y*T,4,0,Math.PI*2);mX.fill();
 }
 
-draw();
+/* ---------- RAYCASTER ---------- */
+const pC=document.getElementById('preview'),pX=pC.getContext('2d');
+const FOV=Math.PI/3,RAYS=160;
+let keys={},dialog=null,bobT=0;
+
+window.onkeydown=e=>{
+ keys[e.key]=1;
+ if(dialog&&e.key==="Enter"){dialog.style.display="none";dialog=null;}
+};
+window.onkeyup=e=>keys[e.key]=0;
+
+function wall(x,y){
+ const xi=Math.floor(x),yi=Math.floor(y);
+ if(xi<0||yi<0||xi>=W||yi>=H)return 1;
+ return map[yi][xi];
+}
+
+function cast(a){
+ for(let d=.1;d<30;d+=.03){
+  if(wall(player.x+Math.cos(a)*d,player.y+Math.sin(a)*d))return d;
+ }
+ return 30;
+}
+
+function lightAt(x,y){
+ let r=40,g=40,b=40;
+ lights.forEach(L=>{
+  const d=Math.hypot(x-L.x,y-L.y);
+  if(d<L.r){
+   const f=(1-d/L.r)*L.e;
+   r+=parseInt(L.c.substr(1,2),16)*f;
+   g+=parseInt(L.c.substr(3,2),16)*f;
+   b+=parseInt(L.c.substr(5,2),16)*f;
+  }
+ });
+ return `rgb(${Math.min(255,r)},${Math.min(255,g)},${Math.min(255,b)})`;
+}
+
+function update(){
+ let move=false;
+ if(keys.a)player.a-=.04;
+ if(keys.d)player.a+=.04;
+ if(keys.w){
+  const nx=player.x+Math.cos(player.a)*.05;
+  const ny=player.y+Math.sin(player.a)*.05;
+  if(!wall(nx,ny)){player.x=nx;player.y=ny;move=true;}
+ }
+ if(keys.s){
+  const nx=player.x-Math.cos(player.a)*.05;
+  const ny=player.y-Math.sin(player.a)*.05;
+  if(!wall(nx,ny)){player.x=nx;player.y=ny;move=true;}
+ }
+ if(move)bobT+=.1;
+
+ const tx=Math.floor(player.x),ty=Math.floor(player.y);
+ if(dialogs[ty]?.[tx]&&!dialog){
+  dialog=document.getElementById('dialogue');
+  dialog.innerText=dialogs[ty][tx];
+  dialog.style.display="block";
+ }
+}
+
+function render(){
+ pX.fillStyle="#000";pX.fillRect(0,0,640,360);
+ const mid=180;
+
+ if(sky.checked){
+  pX.fillStyle=skyCol.value;pX.fillRect(0,0,640,mid);
+  pX.fillStyle=sunCol.value;
+  pX.beginPath();pX.arc(560,60,20,0,Math.PI*2);pX.fill();
+ }
+ pX.fillStyle=floorCol.value;pX.fillRect(0,mid,640,180);
+
+ let bob=0;
+ if(bob.value==="classic")bob=Math.sin(bobT)*6;
+ if(bob.value==="realistic")bob=(Math.sin(bobT*.7)+Math.sin(bobT*1.3)*.4)*6;
+
+ for(let i=0;i<RAYS;i++){
+  const a=player.a-FOV/2+i/RAYS*FOV;
+  const d=cast(a)*Math.cos(a-player.a);
+  const h=360/d;
+  const x=player.x+Math.cos(a)*d,y=player.y+Math.sin(a)*d;
+  pX.fillStyle=lightAt(x,y);
+  pX.fillRect(i*640/RAYS,mid-h/2+bob,640/RAYS+1,h);
+ }
+}
+
+function loop(){
+ update();drawMap();render();
+ requestAnimationFrame(loop);
+}
+loop();
+
+function exportAll(){
+ out.value=JSON.stringify({map,fades,dialogs,lights,player,sprites},null,2);
+}
 </script>
-
 </body>
 </html>
