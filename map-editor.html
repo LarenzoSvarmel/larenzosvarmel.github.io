@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Raycaster Map Editor</title>
+<style>
+  body {
+    background: #111;
+    color: #fff;
+    font-family: monospace;
+    margin: 0;
+    display: flex;
+    height: 100vh;
+  }
+  #ui {
+    padding: 10px;
+    width: 250px;
+    background: #1a1a1a;
+  }
+  canvas {
+    background: #000;
+    cursor: pointer;
+  }
+  button {
+    width: 100%;
+    margin-top: 5px;
+    padding: 6px;
+  }
+  textarea {
+    width: 100%;
+    height: 200px;
+    margin-top: 5px;
+    background: #000;
+    color: #0f0;
+  }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <h3>Map Editor</h3>
+  <button onclick="clearMap()">Clear</button>
+  <button onclick="exportMap()">Export</button>
+  <textarea id="output" readonly></textarea>
+</div>
+
+<canvas id="grid"></canvas>
+
+<script>
+const TILE_SIZE = 32;
+const WIDTH = 16;
+const HEIGHT = 16;
+
+const canvas = document.getElementById('grid');
+canvas.width = WIDTH * TILE_SIZE;
+canvas.height = HEIGHT * TILE_SIZE;
+const ctx = canvas.getContext('2d');
+
+let map = Array.from({length: HEIGHT}, (_, y) =>
+  Array.from({length: WIDTH}, (_, x) =>
+    x === 0 || y === 0 || x === WIDTH-1 || y === HEIGHT-1 ? 1 : 0
+  )
+);
+
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for (let y=0;y<HEIGHT;y++) {
+    for (let x=0;x<WIDTH;x++) {
+      ctx.fillStyle = map[y][x] ? '#888' : '#222';
+      ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
+      ctx.strokeStyle = '#111';
+      ctx.strokeRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    }
+  }
+}
+
+canvas.addEventListener('click', e => {
+  const x = Math.floor(e.offsetX / TILE_SIZE);
+  const y = Math.floor(e.offsetY / TILE_SIZE);
+  map[y][x] = map[y][x] ? 0 : 1;
+  draw();
+});
+
+function clearMap() {
+  map = map.map(row => row.map(() => 0));
+  draw();
+}
+
+function exportMap() {
+  document.getElementById('output').value =
+    JSON.stringify(map, null, 2);
+}
+
+draw();
+</script>
+
+</body>
+</html>
